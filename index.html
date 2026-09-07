@@ -437,7 +437,8 @@ function renderRoute() {
   routes.forEach(function(r){
     document.getElementById("view-" + r).classList.toggle("active", r === h);
   });
-  if (h === "wall") loadWall();
+  if (h === "wall") { loadWall(); startWallAutoRefresh(); }
+  else { stopWallAutoRefresh(); }
   window.scrollTo(0, 0);
 }
 window.addEventListener("hashchange", renderRoute);
@@ -520,7 +521,8 @@ blessMsg.addEventListener("input", updateCharCount);
 /* ============ 存储读写 ============ */
 var CACHE_KEY = "wx_blessings_cache_v1";
 function readBlessings(){
-  return fetch(STORE_URL, { method:"GET" })
+  var bust = (Date.now()) + "" + Math.floor(Math.random() * 1000);
+  return fetch(STORE_URL + "?t=" + bust, { method:"GET", cache:"no-store" })
     .then(function(r){ if(!r.ok) throw new Error("read"); return r.json(); })
     .then(function(data){
       var list = (data && data.blessings) ? data.blessings : [];
@@ -545,7 +547,11 @@ function writeBlessings(list){
     method:"POST",
     headers: { "Content-Type":"application/json" },
     body: JSON.stringify({ blessings: list })
-  }).then(function(r){ if(!r.ok) throw new Error("write"); return r.json(); });
+  }).then(function(r){ if(!r.ok) throw new Error("write"); return r.json(); })
+    .then(function(){
+      try { sessionStorage.setItem(CACHE_KEY, JSON.stringify(list)); } catch(e){}
+      return list;
+    });
 }
 
 /* ============ 提交祝福 ============ */
@@ -627,6 +633,16 @@ function loadWall(){
       loading.style.display = "none";
       if (!cached) wall.innerHTML = '<div class="wall-empty"><p>祝福墙暂时打不开<br>请稍后再来</p></div>';
     });
+}
+var wallTimer = null;
+function startWallAutoRefresh(){
+  stopWallAutoRefresh();
+  wallTimer = setInterval(function(){
+    readBlessings().then(function(list){ renderWallList(list); }).catch(function(){});
+  }, 20000);
+}
+function stopWallAutoRefresh(){
+  if (wallTimer) { clearInterval(wallTimer); wallTimer = null; }
 }
 
 function esc(s){
